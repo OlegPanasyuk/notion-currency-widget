@@ -1,0 +1,30 @@
+.content {
+    font-family: 'Roboto', Arial, sans-serif;
+    font-size: 18px;
+    font-style: normal;
+    font-weight: 300;
+    letter-spacing: normal;
+    line-height: 26px;
+    text-transform: none;
+    color: #4E4E4E;
+}
+
+.container {
+    flex-direction: row;
+    display: flex;
+    justify-content: space-between;
+    
+}
+
+.flex-wrapper {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 8px;
+}
+
+.flex-wrapper .inner-wrapper {
+    width: 100%;
+    max-width: 1200px;
+}
