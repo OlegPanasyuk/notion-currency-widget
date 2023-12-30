@@ -52,6 +52,8 @@ const getLabels = (data) => { return data.rates.map(rate => rate.effectiveDate) 
         data: dataDesc,
         options: {
             responsive: true,
+            maintainAspectRatio: false,
+            aspectRatio: 0.5,
             plugins: {
                 title: {
                     display: true,
@@ -72,8 +74,8 @@ const getLabels = (data) => { return data.rates.map(rate => rate.effectiveDate) 
                 y: {
                     display: true,
                     title: { display: true, text: 'PLN' },
-                    suggestedMin: 3,
-                    suggestedMax: 6
+                    min: 3.5,
+                    max: 5
                 }
             }
         },
