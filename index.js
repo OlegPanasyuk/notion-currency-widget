@@ -1,3 +1,5 @@
+import './normalize.css';
+import './index.css';
 (
     async function () {
         const container = document.querySelector('#eur-current');
