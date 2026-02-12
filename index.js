@@ -1,15 +1,39 @@
 const createDirectionMarkup = (direction) => {
     if (direction > 0) {
-        return '<span style="color: #0B8F3C; font-weight: 700;">▲</span>';
+        return '<span style="color: #0B8F3C; font-weight: 700;">&uarr;</span>';
     }
     if (direction < 0) {
-        return '<span style="color: #CC2B2B; font-weight: 700;">▼</span>';
+        return '<span style="color: #CC2B2B; font-weight: 700;">&darr;</span>';
     }
     return '<span>-</span>';
 };
 
-const setFallbackRateValue = (container, code) => {
+const setFallbackRateValue = async (container, code, previousResponse) => {
+    if (previousResponse && previousResponse.ok) {
+        const previousData = await previousResponse.json();
+        const previousRate = previousData?.rates?.[0]?.mid;
+        if (typeof previousRate === 'number') {
+            container.textContent = `${code}: ${previousRate.toFixed(4)} -`;
+            return;
+        }
+    }
+
     container.textContent = `${code}: -`;
+};
+
+const formatDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const extractDate = (dateValue) => {
+    if (typeof dateValue !== 'string') {
+        return '';
+    }
+
+    return dateValue.split('T')[0];
 };
 
 const renderNbpCurrentRate = async (code, selector) => {
@@ -21,11 +45,11 @@ const renderNbpCurrentRate = async (code, selector) => {
     try {
         const [todayResponse, previousResponse] = await Promise.all([
             fetch(`https://api.nbp.pl/api/exchangerates/rates/A/${code}/today?format=json`),
-            fetch(`https://api.nbp.pl/api/exchangerates/rates/A/${code}/last/2?format=json`)
+            fetch(`https://api.nbp.pl/api/exchangerates/rates/A/${code}/last/1?format=json`)
         ]);
 
         if (!todayResponse.ok) {
-            setFallbackRateValue(container, code);
+            await setFallbackRateValue(container, code, previousResponse);
             return;
         }
 
@@ -34,7 +58,7 @@ const renderNbpCurrentRate = async (code, selector) => {
         const currentDate = todayData?.rates?.[0]?.effectiveDate;
 
         if (typeof currentRate !== 'number') {
-            setFallbackRateValue(container, code);
+            await setFallbackRateValue(container, code, previousResponse);
             return;
         }
 
@@ -49,7 +73,7 @@ const renderNbpCurrentRate = async (code, selector) => {
 
         container.innerHTML = `${code}: ${currentRate.toFixed(4)} ${createDirectionMarkup(direction)}`;
     } catch (error) {
-        setFallbackRateValue(container, code);
+        await setFallbackRateValue(container, code, null);
     }
 };
 
@@ -59,7 +83,7 @@ renderNbpCurrentRate('USD', '#usd-current');
 const DATA_COUNT = 93;
 const colorMapBorders = { EUR: '#003399', USD: '#6B8068' };
 const colorMapbBack = { EUR: '#737373', USD: '#B2B2B2' };
-const getLabels = (data) => { return data.rates.map(rate => rate.effectiveDate) };
+const getLabels = (data) => { return data.rates.map(rate => rate.effectiveDate); };
 (async function () {
     const responces = await Promise.all([
         fetch(`https://api.nbp.pl/api/exchangerates/rates/A/USD//last/${DATA_COUNT}?format=json`),
@@ -78,7 +102,7 @@ const getLabels = (data) => { return data.rates.map(rate => rate.effectiveDate) 
             backgroundColor: colorMapbBack[currRaw.code],
             fill: true, cubicInterpolationMode: 'monotone', tension: 0.4
         };
-        return [...acc, curr]
+        return [...acc, curr];
     }, []);
     const dataDesc = { labels: labels, datasets: datasets };
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
@@ -113,7 +137,7 @@ const getLabels = (data) => { return data.rates.map(rate => rate.effectiveDate) 
                     max: 5
                 }
             }
-        },
+        }
     };
     const ctx = document.getElementById('charts');
     Chart.defaults.font = { ...Chart.defaults.font, family: "'Roboto', 'Helvetica', 'Arial', sans-serif" };
@@ -125,47 +149,80 @@ const getLabels = (data) => { return data.rates.map(rate => rate.effectiveDate) 
     const currencies = [
         { id: 452, name: 'PLN', color: '#DC143C', bgColor: '#FF6B6B' },
         { id: 431, name: 'USD', color: '#6B8068', bgColor: '#B2B2B2' },
-        { id: 451, name: 'EUR', color: '#003399', bgColor: '#737373' },
-        
+        { id: 451, name: 'EUR', color: '#003399', bgColor: '#737373' }
     ];
-    
+
     // Fetch current rates for all currencies
     const currentRates = await Promise.all(
         currencies.map(curr => fetch(`https://api.nbrb.by/exrates/rates/${curr.id}`))
     );
     const currentData = await Promise.all(currentRates.map(res => res.json()));
-    
-    // Display current rates
-    currentData.forEach((data, index) => {
-        const container = document.querySelector(`#pln-current`);
-        if (container && index === 0) {
-            container.innerHTML = currencies.map((curr, i) => 
-                `${curr.name}: ${(currentData[i].Cur_OfficialRate / currentData[i].Cur_Scale).toFixed(5)}`
-            ).join(' | ');
+
+    // Compare with previous available date and show direction for today's data
+    const today = formatDate(new Date());
+    const directionStartDate = new Date();
+    directionStartDate.setDate(directionStartDate.getDate() - 7);
+    const directionResponses = await Promise.all(
+        currencies.map((curr) =>
+            fetch(`https://api.nbrb.by/exrates/rates/dynamics/${curr.id}?startdate=${formatDate(directionStartDate)}&enddate=${today}`)
+        )
+    );
+    const directionData = await Promise.all(directionResponses.map(res => res.json()));
+
+    const directionByCurrency = directionData.map((series) => {
+        if (!Array.isArray(series) || series.length === 0) {
+            return null;
         }
+
+        const todayIndex = series.findIndex((item) => extractDate(item.Date) === today);
+        if (todayIndex === -1) {
+            return null;
+        }
+
+        const todayRate = series[todayIndex]?.Cur_OfficialRate;
+        if (typeof todayRate !== 'number') {
+            return null;
+        }
+
+        for (let i = todayIndex - 1; i >= 0; i -= 1) {
+            const previousRate = series[i]?.Cur_OfficialRate;
+            if (typeof previousRate === 'number') {
+                return todayRate - previousRate;
+            }
+        }
+
+        return 0;
     });
+
+    const plnCurrentContainer = document.querySelector('#pln-current');
+    if (plnCurrentContainer) {
+        plnCurrentContainer.innerHTML = currencies.map((curr, i) => {
+            const item = currentData[i];
+            const isTodayData = extractDate(item?.Date) === today;
+            if (!isTodayData) {
+                return `${curr.name}: -`;
+            }
+
+            const rateValue = item.Cur_OfficialRate / item.Cur_Scale;
+            const direction = directionByCurrency[i];
+            return `${curr.name}: ${rateValue.toFixed(5)} ${createDirectionMarkup(direction ?? 0)}`;
+        }).join(' | ');
+    }
 
     // Fetch historical data for chart
     const endDate = new Date();
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - DATA_COUNT);
-    
-    const formatDate = (date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
 
     const historicalResponses = await Promise.all(
-        currencies.map(curr => 
+        currencies.map(curr =>
             fetch(`https://api.nbrb.by/exrates/rates/dynamics/${curr.id}?startdate=${formatDate(startDate)}&enddate=${formatDate(endDate)}`)
         )
     );
     const historicalData = await Promise.all(historicalResponses.map(res => res.json()));
 
-    const labels = historicalData[0].map(item => item.Date.split('T')[0]);
-    
+    const labels = historicalData[0].map(item => extractDate(item.Date));
+
     const datasets = currencies.map((curr, index) => ({
         label: curr.name,
         data: historicalData[index].map(item => item.Cur_OfficialRate / currentData[index].Cur_Scale),
@@ -215,15 +272,15 @@ const getLabels = (data) => { return data.rates.map(rate => rate.effectiveDate) 
 
     const ctx = document.getElementById('charts_nbrb');
     const nbrbChart = new Chart(ctx, config);
-    
+
     // PLN to BYN converter
     const converterContainer = document.querySelector('#converter-pln-byn');
     if (converterContainer) {
         const plnRate = currentData[0].Cur_OfficialRate / currentData[0].Cur_Scale;
-        
+
         converterContainer.innerHTML = `
             <div style="padding: 20px;">
-                <h3>PLN ⇄ BYN Converter</h3>
+                <h3>PLN <-> BYN Converter</h3>
                 <div style="margin: 10px 0;">
                     <label for="pln-input" style="display: block; margin-bottom: 5px;">PLN:</label>
                     <input type="number" id="pln-input" value="100" style="padding: 8px; width: 200px; font-size: 16px;">
@@ -237,12 +294,12 @@ const getLabels = (data) => { return data.rates.map(rate => rate.effectiveDate) 
                 </div>
             </div>
         `;
-        
+
         const plnInput = document.getElementById('pln-input');
         const bynOutput = document.getElementById('byn-output');
-        
+
         let isConverting = false;
-        
+
         const convertPlnToByn = () => {
             if (isConverting) return;
             isConverting = true;
@@ -251,7 +308,7 @@ const getLabels = (data) => { return data.rates.map(rate => rate.effectiveDate) 
             bynOutput.value = bynAmount.toFixed(4);
             isConverting = false;
         };
-        
+
         const convertBynToPln = () => {
             if (isConverting) return;
             isConverting = true;
@@ -260,9 +317,9 @@ const getLabels = (data) => { return data.rates.map(rate => rate.effectiveDate) 
             plnInput.value = plnAmount.toFixed(4);
             isConverting = false;
         };
-        
+
         plnInput.addEventListener('input', convertPlnToByn);
         bynOutput.addEventListener('input', convertBynToPln);
         convertPlnToByn(); // Initial conversion
     }
-})()
+})();
