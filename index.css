@@ -28,3 +28,18 @@
     width: 100%;
     max-width: 1200px;
 }
+
+.chart-collapse {
+    width: 100%;
+}
+
+.chart-collapse summary {
+    cursor: pointer;
+    user-select: none;
+    padding: 6px 0;
+}
+
+.chart-frame {
+    height: 320px;
+    width: 100%;
+}

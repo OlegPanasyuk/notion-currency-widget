@@ -84,6 +84,19 @@ const DATA_COUNT = 93;
 const colorMapBorders = { EUR: '#003399', USD: '#6B8068' };
 const colorMapbBack = { EUR: '#737373', USD: '#B2B2B2' };
 const getLabels = (data) => { return data.rates.map(rate => rate.effectiveDate); };
+const setupCollapseResize = (detailsId, chart) => {
+    const details = document.getElementById(detailsId);
+    if (!details || !chart) {
+        return;
+    }
+
+    details.addEventListener('toggle', () => {
+        if (details.open) {
+            requestAnimationFrame(() => chart.resize());
+        }
+    });
+};
+
 (async function () {
     const responces = await Promise.all([
         fetch(`https://api.nbp.pl/api/exchangerates/rates/A/USD//last/${DATA_COUNT}?format=json`),
@@ -142,6 +155,7 @@ const getLabels = (data) => { return data.rates.map(rate => rate.effectiveDate);
     const ctx = document.getElementById('charts');
     Chart.defaults.font = { ...Chart.defaults.font, family: "'Roboto', 'Helvetica', 'Arial', sans-serif" };
     const myChart = new Chart(ctx, config);
+    setupCollapseResize('nbp-charts-collapse', myChart);
 })();
 
 // NBRB API for PLN, USD, EUR
@@ -272,7 +286,8 @@ const getLabels = (data) => { return data.rates.map(rate => rate.effectiveDate);
 
     const ctx = document.getElementById('charts_nbrb');
     const nbrbChart = new Chart(ctx, config);
-
+    setupCollapseResize('nbrb-charts-collapse', nbrbChart);
+    
     // PLN to BYN converter
     const converterContainer = document.querySelector('#converter-pln-byn');
     if (converterContainer) {
