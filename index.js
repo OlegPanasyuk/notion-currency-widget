@@ -1,23 +1,60 @@
-(
-    async function () {
-        const container = document.querySelector('#eur-current');
-        const response = await fetch('https://api.nbp.pl/api/exchangerates/rates/A/EUR?format=json');
-        const data = await response.json();
-        if (container) {
-            container.innerHTML = `${data.code.toUpperCase()}: ${data.rates[0].mid}`;
-        }
+const createDirectionMarkup = (direction) => {
+    if (direction > 0) {
+        return '<span style="color: #0B8F3C; font-weight: 700;">▲</span>';
     }
-)();
-(
-    async function () {
-        const container = document.querySelector('#usd-current');
-        const response = await fetch('https://api.nbp.pl/api/exchangerates/rates/A/USD?format=json');
-        const data = await response.json();
-        if (container) {
-            container.innerHTML = `${data.code.toUpperCase()}: ${data.rates[0].mid}`;
-        }
+    if (direction < 0) {
+        return '<span style="color: #CC2B2B; font-weight: 700;">▼</span>';
     }
-)();
+    return '<span>-</span>';
+};
+
+const setFallbackRateValue = (container, code) => {
+    container.textContent = `${code}: -`;
+};
+
+const renderNbpCurrentRate = async (code, selector) => {
+    const container = document.querySelector(selector);
+    if (!container) {
+        return;
+    }
+
+    try {
+        const [todayResponse, previousResponse] = await Promise.all([
+            fetch(`https://api.nbp.pl/api/exchangerates/rates/A/${code}/today?format=json`),
+            fetch(`https://api.nbp.pl/api/exchangerates/rates/A/${code}/last/2?format=json`)
+        ]);
+
+        if (!todayResponse.ok) {
+            setFallbackRateValue(container, code);
+            return;
+        }
+
+        const todayData = await todayResponse.json();
+        const currentRate = todayData?.rates?.[0]?.mid;
+        const currentDate = todayData?.rates?.[0]?.effectiveDate;
+
+        if (typeof currentRate !== 'number') {
+            setFallbackRateValue(container, code);
+            return;
+        }
+
+        let direction = 0;
+        if (previousResponse.ok) {
+            const previousData = await previousResponse.json();
+            const previousRate = previousData?.rates?.find((rate) => rate.effectiveDate !== currentDate)?.mid;
+            if (typeof previousRate === 'number') {
+                direction = currentRate - previousRate;
+            }
+        }
+
+        container.innerHTML = `${code}: ${currentRate.toFixed(4)} ${createDirectionMarkup(direction)}`;
+    } catch (error) {
+        setFallbackRateValue(container, code);
+    }
+};
+
+renderNbpCurrentRate('EUR', '#eur-current');
+renderNbpCurrentRate('USD', '#usd-current');
 
 const DATA_COUNT = 93;
 const colorMapBorders = { EUR: '#003399', USD: '#6B8068' };
