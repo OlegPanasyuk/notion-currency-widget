@@ -45,7 +45,7 @@ const renderNbpCurrentRate = async (code, selector) => {
     try {
         const [todayResponse, previousResponse] = await Promise.all([
             fetch(`https://api.nbp.pl/api/exchangerates/rates/A/${code}/today?format=json`),
-            fetch(`https://api.nbp.pl/api/exchangerates/rates/A/${code}/last/1?format=json`)
+            fetch(`https://api.nbp.pl/api/exchangerates/rates/A/${code}/last/2?format=json`)
         ]);
 
         if (!todayResponse.ok) {
